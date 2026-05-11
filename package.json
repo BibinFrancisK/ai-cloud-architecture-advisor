@@ -1,0 +1,15 @@
+{
+  "name": "ai-cloud-architecture-advisor",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start:dev": "cd apps/api && npm run start:dev",
+    "build": "cd apps/api && npm run build",
+    "lint": "cd apps/api && npm run lint",
+    "type-check": "cd apps/api && npx tsc --noEmit",
+    "test": "cd apps/api && npm run test",
+    "test:unit": "cd apps/api && npm run test -- --testPathPattern=unit",
+    "test:integration": "cd apps/api && npm run test -- --testPathPattern=integration",
+    "ingest": "cd apps/api && npx ts-node scripts/ingest-knowledge-base.ts"
+  }
+}
