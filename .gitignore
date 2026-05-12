@@ -143,6 +143,10 @@ vite.config.ts.timestamp-*
 .vite/
 
 **PLAN**.md
+**NOTES**.md
+
+# Claude Code
+.claude/settings.local.json
 
 # IDE
 .idea/
