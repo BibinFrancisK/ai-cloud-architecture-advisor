@@ -1,10 +1,24 @@
 import { Module } from '@nestjs/common';
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { HealthController } from './health/health.controller';
+import { SessionModule } from './session/session.module';
+import { ChatModule } from './chat/chat.module';
+import { ArchitectureModule } from './architecture/architecture.module';
+import { ClarificationModule } from './clarification/clarification.module';
+import { RagModule } from './rag/rag.module';
+import { LlmModule } from './llm/llm.module';
+import { CdkModule } from './cdk/cdk.module';
 
 @Module({
-  imports: [],
-  controllers: [AppController],
-  providers: [AppService],
+  imports: [
+    SessionModule,
+    ChatModule,
+    ArchitectureModule,
+    ClarificationModule,
+    RagModule,
+    LlmModule,
+    CdkModule,
+  ],
+  controllers: [HealthController],
+  providers: [],
 })
 export class AppModule {}
