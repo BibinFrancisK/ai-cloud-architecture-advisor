@@ -1,11 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { SessionStatus } from '../../session/session.types';
+import { SessionStatus } from '../../session/types/session.types';
+import { NextAction } from '../types/chat.types';
 
-export enum NextAction {
-  CONTINUE_CLARIFICATION = 'CONTINUE_CLARIFICATION',
-  GENERATE_ARCHITECTURE = 'GENERATE_ARCHITECTURE',
-  GENERATE_CDK = 'GENERATE_CDK',
-}
+export { NextAction };
 
 export class ChatResponseDto {
   @ApiProperty()

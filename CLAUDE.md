@@ -59,7 +59,7 @@ CLARIFYING → READY_TO_GENERATE → ARCHITECTURE_GENERATED → ARCHITECTURE_APP
 
 ### RAG Flow
 
-Ingestion (one-time, `npm run ingest`): Markdown files in `knowledge-base/` → `RecursiveCharacterTextSplitter` (1000 token chunks, 200 overlap) → Gemini `text-embedding-004` (768-dim) → pgvector `knowledge_chunks` table.
+Ingestion (one-time, `npm run ingest`): Markdown files in `knowledge-base/` → `RecursiveCharacterTextSplitter` (1000 token chunks, 200 overlap) → Gemini `gemini-embedding-001` (3072-dim) → pgvector `knowledge_chunks` table.
 
 Retrieval (per-request): user query + conversation context → embed → `SELECT ... ORDER BY embedding <=> $1 LIMIT 5` (cosine similarity) → top-5 chunks injected into prompt.
 
@@ -76,6 +76,8 @@ The `ArchitectureRecommendation` type is the central data contract between `Arch
 - **Clarification gate** — CDK generation is always gated. Never bypass the `RequirementsCompleteGuard`.
 - **TypeScript strict mode** — `tsconfig.json` has `"strict": true`. No `any` types.
 - **Knowledge base is static** — Files in `knowledge-base/*.md` are authored Markdown, not scraped. Do not add web scraping.
+- **Types in `types/` directories** — Interfaces, enums, and type aliases belong in a `types/` subdirectory within their module (e.g. `rag/types/rag.types.ts`). Do not define shared types inline inside service or controller files.
+- **No `console` logging** — Never use `console.log()`, `console.error()`, or any other `console.*` method. Always use NestJS's built-in `Logger`: `private readonly logger = new Logger(ClassName.name);`.
 
 ## Environment Variables
 

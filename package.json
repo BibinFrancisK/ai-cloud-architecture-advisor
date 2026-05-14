@@ -10,6 +10,6 @@
     "test": "cd apps/api && npm run test",
     "test:unit": "cd apps/api && npm run test -- --testPathPattern=unit",
     "test:integration": "cd apps/api && npm run test -- --testPathPattern=integration",
-    "ingest": "cd apps/api && npx ts-node scripts/ingest-knowledge-base.ts"
+    "ingest": "cd apps/api && node --env-file=../../.env node_modules/ts-node/dist/bin.js -r tsconfig-paths/register src/scripts/ingest-knowledge-base.ts"
   }
 }
