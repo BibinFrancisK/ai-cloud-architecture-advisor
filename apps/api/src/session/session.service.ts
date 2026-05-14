@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { SessionState, SessionStatus } from './session.types';
+import { SessionState, SessionStatus } from './types/session.types';
 
 @Injectable()
 export class SessionService {

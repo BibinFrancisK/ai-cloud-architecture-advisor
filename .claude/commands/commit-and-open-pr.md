@@ -18,6 +18,8 @@ Safely review changes, validate quality, and create a pull request only if every
     - No `any` types (project uses `strict: true`)
     - No ESLint disable comments without a justification
     - No hardcoded secrets or API keys
+    - No `console.*` calls — all logging must use NestJS `Logger`
+    - Interfaces, enums, and type aliases are defined in a `types/` subdirectory, not inline in service or controller files
 
 ### 2. Report Issues (If Any)
 - If any issues are found:

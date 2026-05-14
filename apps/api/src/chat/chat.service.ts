@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { SessionService } from '../session/session.service';
 import { ChatMessageDto } from './dto/chat-message.dto';
-import { ChatResponseDto, NextAction } from './dto/chat-response.dto';
+import { ChatResponseDto } from './dto/chat-response.dto';
+import { NextAction } from './types/chat.types';
 
 @Injectable()
 export class ChatService {

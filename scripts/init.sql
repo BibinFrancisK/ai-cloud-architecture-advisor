@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS knowledge_chunks (
   source_file VARCHAR(255) NOT NULL,
   chunk_index INTEGER NOT NULL,
   metadata    JSONB,
-  embedding   vector(768),
+  embedding   vector(3072),
   created_at  TIMESTAMP DEFAULT NOW()
 );
 
