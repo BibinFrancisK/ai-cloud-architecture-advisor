@@ -5,15 +5,13 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { Pool } from 'pg';
-import { KnowledgeChunkInput, SearchResult } from './types/rag.types';
+import { KnowledgeChunkInput, SearchResult } from '../common/types/rag.types';
 import {
   CLEAR_ALL,
   GET_CHUNK_COUNT,
   SIMILARITY_SEARCH,
   UPSERT_CHUNK,
 } from './vector-store.queries';
-
-export type { KnowledgeChunkInput, SearchResult };
 
 @Injectable()
 export class VectorStoreService implements OnModuleInit, OnModuleDestroy {

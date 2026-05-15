@@ -76,7 +76,8 @@ The `ArchitectureRecommendation` type is the central data contract between `Arch
 - **Clarification gate** — CDK generation is always gated. Never bypass the `RequirementsCompleteGuard`.
 - **TypeScript strict mode** — `tsconfig.json` has `"strict": true`. No `any` types.
 - **Knowledge base is static** — Files in `knowledge-base/*.md` are authored Markdown, not scraped. Do not add web scraping.
-- **Types in `types/` directories** — Interfaces, enums, and type aliases belong in a `types/` subdirectory within their module (e.g. `rag/types/rag.types.ts`). Do not define shared types inline inside service or controller files.
+- **Types in `common/types/`** — All interfaces, enums, and type aliases live in `apps/api/src/common/types/` (e.g. `common/types/rag.types.ts`). Do not define types inline inside service or controller files, and do not create module-local `types/` subdirectories.
+- **Constants in `common/constants.ts`** — String literals for model names and other shared constants (e.g. `LLM_MODEL`, `EMBEDDING_MODEL`) are declared in `apps/api/src/common/constants.ts` and imported from there. Never hardcode model name strings in service files.
 - **No `console` logging** — Never use `console.log()`, `console.error()`, or any other `console.*` method. Always use NestJS's built-in `Logger`: `private readonly logger = new Logger(ClassName.name);`.
 
 ## Environment Variables

@@ -1,8 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
-import { RetrievedChunk } from './types/rag.types';
+import { RetrievedChunk } from '../common/types/rag.types';
 import { VectorStoreService } from './vector-store.service';
-import { EMBEDDING_MODEL } from './rag.constants';
+import { EMBEDDING_MODEL } from '../common/constants';
 
 @Injectable()
 export class RAGRetrieverService implements OnModuleInit {
