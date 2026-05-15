@@ -1,8 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { SessionStatus } from '../../session/types/session.types';
-import { NextAction } from '../types/chat.types';
-
-export { NextAction };
+import { SessionStatus } from '../../common/types/session.types';
+import { NextAction } from '../../common/types/chat.types';
 
 export class ChatResponseDto {
   @ApiProperty()

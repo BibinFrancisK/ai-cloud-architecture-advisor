@@ -4,7 +4,7 @@ import * as path from 'path';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { VectorStoreService } from './vector-store.service';
-import { EMBEDDING_MODEL } from './rag.constants';
+import { EMBEDDING_MODEL } from '../common/constants';
 
 const CHUNK_DELAY_MS = 800;
 
