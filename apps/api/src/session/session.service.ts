@@ -25,4 +25,11 @@ export class SessionService {
     }
     return session;
   }
+
+  save(session: SessionState): void {
+    if (!this.sessions.has(session.id)) {
+      throw new NotFoundException(`Session ${session.id} not found`);
+    }
+    this.sessions.set(session.id, session);
+  }
 }
