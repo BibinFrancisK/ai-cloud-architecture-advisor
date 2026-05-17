@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { BuildRequestParams, LlmRequest } from '../common/types/llm.types';
 import { RetrievedChunk } from '../common/types/rag.types';
-import { SYSTEM_PROMPT } from '../common/constants';
+import type { ConversationMessage } from '../common/types/session.types';
+import { ARCHITECTURE_SYSTEM_PROMPT, SYSTEM_PROMPT } from '../common/constants';
 
 @Injectable()
 export class PromptBuilderService {
@@ -28,6 +29,19 @@ export class PromptBuilderService {
     return {
       systemPrompt: this.buildSystemPrompt(),
       userMessage,
+      ragContext: this.buildRagContextBlock(ragChunks),
+      conversationHistory,
+    };
+  }
+
+  buildArchitectureRequest(
+    conversationHistory: ConversationMessage[],
+    ragChunks: RetrievedChunk[],
+  ): LlmRequest {
+    return {
+      systemPrompt: ARCHITECTURE_SYSTEM_PROMPT,
+      userMessage:
+        'Based on the requirements gathered in our conversation, generate the architecture recommendation.',
       ragContext: this.buildRagContextBlock(ragChunks),
       conversationHistory,
     };

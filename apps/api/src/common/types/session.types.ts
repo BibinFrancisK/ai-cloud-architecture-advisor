@@ -1,3 +1,5 @@
+import type { ArchitectureRecommendation } from './architecture.types';
+
 export enum SessionStatus {
   CLARIFYING = 'CLARIFYING',
   READY_TO_GENERATE = 'READY_TO_GENERATE',
@@ -18,5 +20,6 @@ export interface SessionState {
   messages: ConversationMessage[];
   clarificationRound: number;
   completenessScore: number;
+  architecture?: ArchitectureRecommendation;
   createdAt: Date;
 }

@@ -6,6 +6,7 @@ import {
   AIMessage,
   BaseMessage,
 } from '@langchain/core/messages';
+import { z } from 'zod';
 import { LlmRequest, LlmResponse } from '../common/types/llm.types';
 import { LLM_MODEL } from '../common/constants';
 
@@ -24,6 +25,23 @@ export class LlmService implements OnModuleInit {
       maxOutputTokens: 8192,
       temperature: 0.2,
     });
+  }
+
+  async generateStructured<T extends Record<string, unknown>>(
+    request: LlmRequest,
+    schema: z.ZodType<T>,
+  ): Promise<T> {
+    this.logger.debug(
+      `Structured LLM request: "${request.userMessage.slice(0, 80)}${request.userMessage.length > 80 ? '...' : ''}"`,
+    );
+
+    const messages = this.buildMessages(request);
+    const structuredModel = this.model.withStructuredOutput(schema);
+    const result = await this.withRetry(() => structuredModel.invoke(messages));
+
+    this.logger.log('Structured LLM response received');
+
+    return result;
   }
 
   async generate(request: LlmRequest): Promise<LlmResponse> {
