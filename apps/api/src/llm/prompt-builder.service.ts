@@ -2,7 +2,17 @@ import { Injectable } from '@nestjs/common';
 import { BuildRequestParams, LlmRequest } from '../common/types/llm.types';
 import { RetrievedChunk } from '../common/types/rag.types';
 import type { ConversationMessage } from '../common/types/session.types';
-import { ARCHITECTURE_SYSTEM_PROMPT, SYSTEM_PROMPT } from '../common/constants';
+import type { ArchitectureRecommendation } from '../common/types/architecture.types';
+import type {
+  CdkEnvironment,
+  CdkGenerationMode,
+} from '../common/types/cdk.types';
+import {
+  ARCHITECTURE_SYSTEM_PROMPT,
+  CDK_COMPLETE_SYSTEM_PROMPT,
+  CDK_SKELETON_SYSTEM_PROMPT,
+  SYSTEM_PROMPT,
+} from '../common/constants';
 
 @Injectable()
 export class PromptBuilderService {
@@ -44,6 +54,24 @@ export class PromptBuilderService {
         'Based on the requirements gathered in our conversation, generate the architecture recommendation.',
       ragContext: this.buildRagContextBlock(ragChunks),
       conversationHistory,
+    };
+  }
+
+  buildCdkRequest(
+    architecture: ArchitectureRecommendation,
+    mode: CdkGenerationMode,
+    environment: CdkEnvironment,
+  ): LlmRequest {
+    const userMessage = `Environment: ${environment}\n\n${JSON.stringify(architecture, null, 2)}`;
+
+    return {
+      systemPrompt:
+        mode === 'skeleton'
+          ? CDK_SKELETON_SYSTEM_PROMPT
+          : CDK_COMPLETE_SYSTEM_PROMPT,
+      userMessage,
+      ragContext: undefined,
+      conversationHistory: [],
     };
   }
 }
