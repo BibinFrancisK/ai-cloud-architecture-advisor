@@ -32,4 +32,10 @@ export class SessionService {
     }
     this.sessions.set(session.id, session);
   }
+
+  updateStatus(id: string, status: SessionStatus): void {
+    const session = this.findById(id);
+    session.status = status;
+    this.sessions.set(id, session);
+  }
 }
