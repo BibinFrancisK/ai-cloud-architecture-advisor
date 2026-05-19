@@ -2,8 +2,10 @@ import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { SessionService } from '../session/session.service';
 import { RAGRetrieverService } from '../rag/rag-retriever.service';
 import { ArchitectureGeneratorService } from './architecture-generator.service';
+import { DiagramService } from './diagram.service';
 import { SessionStatus } from '../common/types/session.types';
 import type { ArchitectureRecommendation } from '../common/types/architecture.types';
+import type { DiagramResponse } from '../common/types/diagram.types';
 
 @Injectable()
 export class ArchitectureService {
@@ -13,22 +15,13 @@ export class ArchitectureService {
     private readonly sessionService: SessionService,
     private readonly ragRetriever: RAGRetrieverService,
     private readonly generator: ArchitectureGeneratorService,
+    private readonly diagramService: DiagramService,
   ) {}
 
   async getOrGenerate(sessionId: string): Promise<ArchitectureRecommendation> {
     const session = this.sessionService.findById(sessionId);
 
-    if (
-      session.status === SessionStatus.ARCHITECTURE_GENERATED &&
-      session.architecture
-    ) {
-      return session.architecture;
-    }
-
-    if (
-      session.status === SessionStatus.ARCHITECTURE_APPROVED &&
-      session.architecture
-    ) {
+    if (session.architecture) {
       return session.architecture;
     }
 
@@ -71,6 +64,18 @@ export class ArchitectureService {
     );
 
     return architecture;
+  }
+
+  getDiagram(sessionId: string): DiagramResponse {
+    const session = this.sessionService.findById(sessionId);
+
+    if (!session.architecture) {
+      throw new BadRequestException(
+        'Architecture must be generated before a diagram can be retrieved.',
+      );
+    }
+
+    return this.diagramService.getDiagram(session.architecture);
   }
 
   approve(sessionId: string): void {
