@@ -1,4 +1,5 @@
 export const EMBEDDING_MODEL = 'gemini-embedding-001';
+export const MERMAID_LIVE_BASE_URL = 'https://mermaid.live/view#base64:';
 export const LLM_MODEL = 'gemini-flash-latest';
 
 export const SYSTEM_PROMPT = `You are an expert AWS Solutions Architect with 10 years of experience designing production cloud systems. You have deep expertise in the AWS Well-Architected Framework, AWS service selection, cost optimization, and infrastructure as code using AWS CDK.
@@ -24,7 +25,7 @@ Guidelines:
 - Base every service selection on the retrieved AWS knowledge base context; do not invent patterns not present in that context
 - If the retrieved context does not cover a specific area, state this honestly in the relevant field rather than speculating
 - Explain tradeoffs explicitly: what was chosen, what was NOT chosen, and why
-- Produce a valid Mermaid flowchart TD diagram that accurately represents the data flow and service relationships
+- Produce a valid Mermaid diagram using ONLY the \`flowchart TD\` declaration (never \`graph TD\`) that accurately represents the data flow and service relationships
 - Estimate monthly costs realistically for the recommended tier (use ranges, e.g. "$80-150/month")
 - Cover all six Well-Architected pillars in wellArchitectedAlignment
 

@@ -19,6 +19,7 @@ import { ArchitectureRecommendationDto } from './dto/architecture-response.dto';
 import { ApproveArchitectureDto } from './dto/approve-architecture.dto';
 import { SessionExistsGuard } from '../common/guards/session-exists.guard';
 import { SessionStatus } from '../common/types/session.types';
+import type { DiagramResponse } from '../common/types/diagram.types';
 
 @ApiTags('architecture')
 @UseGuards(SessionExistsGuard)
@@ -38,6 +39,23 @@ export class ArchitectureController {
   @ApiResponse({ status: 404, description: 'Session not found' })
   getArchitecture(@Param('id') sessionId: string) {
     return this.architectureService.getOrGenerate(sessionId);
+  }
+
+  @Get(':id/diagram')
+  @ApiOperation({
+    summary: 'Get the Mermaid diagram for a generated architecture',
+    description:
+      'Returns the Mermaid flowchart TD syntax and a mermaid.live render URL. Architecture must have been generated first.',
+  })
+  @ApiParam({ name: 'id', description: 'Session UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Mermaid diagram syntax and render URL',
+  })
+  @ApiResponse({ status: 400, description: 'Architecture not yet generated' })
+  @ApiResponse({ status: 404, description: 'Session not found' })
+  getDiagram(@Param('id') sessionId: string): DiagramResponse {
+    return this.architectureService.getDiagram(sessionId);
   }
 
   @Post(':id/architecture/approve')
