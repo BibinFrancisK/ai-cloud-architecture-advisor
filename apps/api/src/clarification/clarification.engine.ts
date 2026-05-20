@@ -12,14 +12,23 @@ export class ClarificationEngine {
   }
 
   selectQuestion(assessment: RequirementsAssessment, round: number): string {
-    // Sort dimensions weakest-first so each round targets a different gap.
-    const sorted = [...assessment.scores].sort((a, b) => a.score - b.score);
-    const dimensionCount = sorted.length;
+    // Only target dimensions not yet fully answered (score < 2) so we never
+    // repeat a question whose answer was already understood.
+    const unanswered = [...assessment.scores]
+      .filter((d) => d.score < 2)
+      .sort((a, b) => a.score - b.score);
 
-    const idx = round % dimensionCount;
-    const useFollowUp = round >= dimensionCount;
+    // Fallback: if scoring somehow cleared everything, ask about the weakest.
+    const pool =
+      unanswered.length > 0
+        ? unanswered
+        : [...assessment.scores].sort((a, b) => a.score - b.score);
 
-    const dimension = sorted[idx].dimension;
+    const idx = round % pool.length;
+    // Ask follow-up once we've cycled through all unanswered dimensions once.
+    const useFollowUp = round >= pool.length;
+
+    const dimension = pool[idx].dimension;
     const entry = CLARIFICATION_QUESTIONS[dimension];
     return useFollowUp ? entry.followUp : entry.question;
   }

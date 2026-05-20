@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AWS Architecture Advisor</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/themes/prism-tomorrow.min.css" rel="stylesheet">
+
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="app-header">
+      <h1>AWS Architecture Advisor</h1>
+      <span class="separator">·</span>
+      <span id="status-badge" class="status-badge"></span>
+    </header>
+
+    <div id="chat-thread"></div>
+
+    <div id="action-bar"></div>
+
+    <div id="input-area">
+      <span id="input-prefix">▶</span>
+      <textarea
+        id="message-input"
+        placeholder="Describe the system you want to build..."
+        rows="1"
+        disabled
+      ></textarea>
+      <button id="send-btn" disabled>Send</button>
+    </div>
+    <p class="input-hint">Enter to send &nbsp;·&nbsp; Shift+Enter for newline</p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/prism.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.29.0/components/prism-typescript.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

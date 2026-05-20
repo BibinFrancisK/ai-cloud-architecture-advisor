@@ -1,5 +1,7 @@
+import { join } from 'path';
 import { APP_INTERCEPTOR } from '@nestjs/core';
 import { Module } from '@nestjs/common';
+import { ServeStaticModule } from '@nestjs/serve-static';
 import { HealthController } from './health/health.controller';
 import { SessionModule } from './session/session.module';
 import { ChatModule } from './chat/chat.module';
@@ -12,6 +14,9 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 
 @Module({
   imports: [
+    ServeStaticModule.forRoot({
+      rootPath: join(__dirname, '..', '..', '..', 'frontend'),
+    }),
     SessionModule,
     ChatModule,
     ArchitectureModule,
