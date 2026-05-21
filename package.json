@@ -8,8 +8,8 @@
     "lint": "cd apps/api && npm run lint",
     "type-check": "cd apps/api && npx tsc --noEmit",
     "test": "cd apps/api && npm run test",
-    "test:unit": "cd apps/api && npm run test -- --testPathPattern=unit",
-    "test:integration": "cd apps/api && npm run test -- --testPathPattern=integration",
+    "test:unit": "cd apps/api && npm run test:unit",
+    "test:integration": "cd apps/api && npm run test:integration",
     "ingest": "cd apps/api && node --env-file=../../.env node_modules/ts-node/dist/bin.js -r tsconfig-paths/register src/scripts/ingest-knowledge-base.ts"
   }
 }

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { SessionService } from '../session/session.service';
 import { RequirementScorer } from '../clarification/requirement.scorer';
 import { ClarificationEngine } from '../clarification/clarification.engine';
@@ -17,6 +17,15 @@ export class ChatService {
 
   handleMessage(sessionId: string, dto: ChatMessageDto): ChatResponseDto {
     const session = this.sessionService.findById(sessionId);
+
+    const userMessageCount = session.messages.filter(
+      (m) => m.role === 'user',
+    ).length;
+    if (userMessageCount >= 20) {
+      throw new BadRequestException(
+        'Session message limit reached. Please start a new session.',
+      );
+    }
 
     session.messages.push({
       role: 'user',
