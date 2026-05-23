@@ -58,6 +58,20 @@ describe('DiagramService', () => {
     expect(renderUrl.startsWith(MERMAID_LIVE_BASE_URL)).toBe(true);
   });
 
+  it('replaces inner parentheses in round-bracket node labels to prevent parse errors', () => {
+    const input =
+      'flowchart TD\n  A(Security & Compliance (EU-west-1)) --> B[API]';
+    const { mermaidSyntax } = service.getDiagram(makeArchitecture(input));
+    expect(mermaidSyntax).not.toMatch(/A\([^)]*\([^)]*\)/);
+    expect(mermaidSyntax).toContain('[EU-west-1]');
+  });
+
+  it('leaves already-quoted node labels untouched', () => {
+    const input = 'flowchart TD\n  A("label with (parens)") --> B';
+    const { mermaidSyntax } = service.getDiagram(makeArchitecture(input));
+    expect(mermaidSyntax).toContain('"label with (parens)"');
+  });
+
   it('encodes the resolved mermaidSyntax as base64 JSON in the renderUrl', () => {
     const input = 'flowchart TD\n  A --> B';
     const { mermaidSyntax, renderUrl } = service.getDiagram(

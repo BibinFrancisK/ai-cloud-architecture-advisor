@@ -4,6 +4,7 @@ import { type Server } from 'http';
 import request from 'supertest';
 import { SessionModule } from '../../src/session/session.module';
 import { ChatModule } from '../../src/chat/chat.module';
+import { LlmService } from '../../src/llm/llm.service';
 import { SessionStatus } from '../../src/common/types/session.types';
 import { NextAction } from '../../src/common/types/chat.types';
 
@@ -22,20 +23,46 @@ interface ChatResponse {
   nextAction: NextAction;
 }
 
-// One message that scores 2 on all six requirement dimensions (total = 100).
-// Used to drive the session past the 70-point threshold in a single turn.
-const RICH_MESSAGE =
-  'We expect 500 rps at peak. p99 under 200ms is required. ' +
-  'We need strong consistency. 5 engineers on the team. ' +
-  'Monthly budget per month. GDPR compliance required.';
+const LOW_SCORE_OUTPUT = {
+  SCALE: 0,
+  LATENCY: 0,
+  PERSISTENCE: 0,
+  TEAM: 0,
+  BUDGET: 0,
+  COMPLIANCE: 0,
+  questions: ['What scale do you expect?'],
+  isComplete: false,
+};
+
+const HIGH_SCORE_OUTPUT = {
+  SCALE: 2,
+  LATENCY: 2,
+  PERSISTENCE: 2,
+  TEAM: 2,
+  BUDGET: 2,
+  COMPLIANCE: 2,
+  questions: [],
+  isComplete: true,
+};
 
 describe('Conversation flow', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
+    const mockLlmService = {
+      generateStructured: jest
+        .fn()
+        .mockResolvedValueOnce(LOW_SCORE_OUTPUT)
+        .mockResolvedValue(HIGH_SCORE_OUTPUT),
+      generate: jest.fn().mockResolvedValue({ text: 'mock', tokensUsed: 0 }),
+    };
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [SessionModule, ChatModule],
-    }).compile();
+    })
+      .overrideProvider(LlmService)
+      .useValue(mockLlmService)
+      .compile();
 
     app = moduleRef.createNestApplication();
     app.useGlobalPipes(
@@ -90,7 +117,10 @@ describe('Conversation flow', () => {
     it('transitions to READY_TO_GENERATE once completeness score reaches the threshold', async () => {
       const res = await request(app.getHttpServer() as Server)
         .post(`/sessions/${sessionId}/chat`)
-        .send({ message: RICH_MESSAGE })
+        .send({
+          message:
+            'We need 500 rps, p99 under 200ms, strong consistency, 5 engineers, fixed budget, GDPR compliance',
+        })
         .expect(200);
       const body = res.body as ChatResponse;
 

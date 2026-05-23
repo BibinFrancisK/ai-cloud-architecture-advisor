@@ -20,6 +20,8 @@ export interface SessionState {
   messages: ConversationMessage[];
   clarificationRound: number;
   completenessScore: number;
+  pendingQuestions: string[];
+  clarificationBatch: number;
   architecture?: ArchitectureRecommendation;
   createdAt: Date;
 }

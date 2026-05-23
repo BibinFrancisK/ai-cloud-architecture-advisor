@@ -1,223 +1,153 @@
 import { RequirementScorer } from './requirement.scorer';
+import { LlmService } from '../llm/llm.service';
 import type { ConversationMessage } from '../common/types/session.types';
 import { RequirementDimension } from '../common/types/clarification.types';
 
-function msg(content: string): ConversationMessage {
-  return { role: 'user', content, timestamp: new Date() };
+function msg(
+  content: string,
+  role: 'user' | 'assistant' = 'user',
+): ConversationMessage {
+  return { role, content, timestamp: new Date() };
 }
+
+const ALL_ZEROS = {
+  SCALE: 0,
+  LATENCY: 0,
+  PERSISTENCE: 0,
+  TEAM: 0,
+  BUDGET: 0,
+  COMPLIANCE: 0,
+  questions: [],
+  isComplete: false,
+};
+
+const ALL_TWOS = {
+  SCALE: 2,
+  LATENCY: 2,
+  PERSISTENCE: 2,
+  TEAM: 2,
+  BUDGET: 2,
+  COMPLIANCE: 2,
+  questions: [],
+  isComplete: true,
+};
 
 describe('RequirementScorer', () => {
   let scorer: RequirementScorer;
+  let mockLlmService: { generateStructured: jest.Mock };
 
   beforeEach(() => {
-    scorer = new RequirementScorer();
+    mockLlmService = { generateStructured: jest.fn() };
+    scorer = new RequirementScorer(mockLlmService as unknown as LlmService);
   });
 
-  it('returns totalScore 0 and a valid lowestDimension when messages are empty', () => {
-    const result = scorer.score([]);
+  it('returns totalScore 0 and a valid lowestDimension when LLM scores all dimensions 0', async () => {
+    mockLlmService.generateStructured.mockResolvedValue({ ...ALL_ZEROS });
+    const result = await scorer.score([msg('I need a web app')]);
     expect(result.totalScore).toBe(0);
     expect(Object.values(RequirementDimension)).toContain(
       result.lowestDimension,
     );
   });
 
-  describe('SCALE dimension', () => {
-    it('scores 0 when scale is not mentioned', () => {
-      const result = scorer.score([msg('I need a simple web application')]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.SCALE,
-      );
-      expect(dim?.score).toBe(0);
-    });
-
-    it('scores 1 when scale is mentioned vaguely', () => {
-      const result = scorer.score([
-        msg('We expect high traffic from many users'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.SCALE,
-      );
-      expect(dim?.score).toBe(1);
-    });
-
-    it('scores 2 when scale is specified with an exact RPS figure', () => {
-      const result = scorer.score([msg('We expect 200 rps at peak load')]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.SCALE,
-      );
-      expect(dim?.score).toBe(2);
-    });
-  });
-
-  describe('LATENCY dimension', () => {
-    it('scores 0 when latency is not mentioned', () => {
-      const result = scorer.score([msg('I need a simple web application')]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.LATENCY,
-      );
-      expect(dim?.score).toBe(0);
-    });
-
-    it('scores 1 when latency is mentioned vaguely', () => {
-      const result = scorer.score([
-        msg('The application needs to be fast and responsive'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.LATENCY,
-      );
-      expect(dim?.score).toBe(1);
-    });
-
-    it('scores 2 when a specific p99 target is stated', () => {
-      const result = scorer.score([
-        msg('We need p99 under 200ms response time'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.LATENCY,
-      );
-      expect(dim?.score).toBe(2);
-    });
-  });
-
-  describe('PERSISTENCE dimension', () => {
-    it('scores 0 when persistence is not mentioned', () => {
-      const result = scorer.score([msg('I need a simple web application')]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.PERSISTENCE,
-      );
-      expect(dim?.score).toBe(0);
-    });
-
-    it('scores 1 when a storage type is mentioned without details', () => {
-      const result = scorer.score([
-        msg('We need a database for our application'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.PERSISTENCE,
-      );
-      expect(dim?.score).toBe(1);
-    });
-
-    it('scores 2 when the consistency model is specified', () => {
-      const result = scorer.score([
-        msg('We require strong consistency for all writes'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.PERSISTENCE,
-      );
-      expect(dim?.score).toBe(2);
-    });
-  });
-
-  describe('TEAM dimension', () => {
-    it('scores 0 when team information is not mentioned', () => {
-      const result = scorer.score([msg('I need a simple web application')]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.TEAM,
-      );
-      expect(dim?.score).toBe(0);
-    });
-
-    it('scores 1 when team size is mentioned without a specific number', () => {
-      const result = scorer.score([
-        msg('We have a small team and prefer managed services'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.TEAM,
-      );
-      expect(dim?.score).toBe(1);
-    });
-
-    it('scores 2 when team size is given as a specific number', () => {
-      const result = scorer.score([msg('We are a team of 5 engineers')]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.TEAM,
-      );
-      expect(dim?.score).toBe(2);
-    });
-  });
-
-  describe('BUDGET dimension', () => {
-    it('scores 0 when budget is not mentioned', () => {
-      const result = scorer.score([msg('I need a simple web application')]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.BUDGET,
-      );
-      expect(dim?.score).toBe(0);
-    });
-
-    it('scores 1 when cost concern is mentioned without an amount', () => {
-      const result = scorer.score([
-        msg('We need to stay within our budget and keep costs low'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.BUDGET,
-      );
-      expect(dim?.score).toBe(1);
-    });
-
-    it('scores 2 when a specific monthly spend is stated', () => {
-      const result = scorer.score([
-        msg('Our monthly budget is around $3000 per month'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.BUDGET,
-      );
-      expect(dim?.score).toBe(2);
-    });
-  });
-
-  describe('COMPLIANCE dimension', () => {
-    it('scores 0 when compliance is not mentioned', () => {
-      const result = scorer.score([msg('I need a simple web application')]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.COMPLIANCE,
-      );
-      expect(dim?.score).toBe(0);
-    });
-
-    it('scores 1 when security is mentioned without a specific framework', () => {
-      const result = scorer.score([
-        msg('We have strict security and compliance requirements'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.COMPLIANCE,
-      );
-      expect(dim?.score).toBe(1);
-    });
-
-    it('scores 2 when a specific compliance standard is cited', () => {
-      const result = scorer.score([
-        msg('We must comply with GDPR and store data in the EU region'),
-      ]);
-      const dim = result.scores.find(
-        (s) => s.dimension === RequirementDimension.COMPLIANCE,
-      );
-      expect(dim?.score).toBe(2);
-    });
-  });
-
-  it('returns totalScore 100 when all six dimensions are fully specified', () => {
-    const result = scorer.score([
-      msg('We expect 200 rps at peak'),
-      msg('p99 under 200ms response'),
-      msg('strong consistency needed'),
-      msg('5 engineers on the team'),
-      msg('per month budget allocated'),
-      msg('GDPR compliance required'),
-    ]);
+  it('returns totalScore 100 when LLM scores all dimensions 2', async () => {
+    mockLlmService.generateStructured.mockResolvedValue({ ...ALL_TWOS });
+    const result = await scorer.score([msg('detailed requirements')]);
     expect(result.totalScore).toBe(100);
   });
 
-  it('sets lowestDimension to the dimension with the lowest score', () => {
-    const result = scorer.score([
-      msg('We expect traffic from many users'),
-      msg('fast response needed'),
-      msg('we have a database'),
-      msg('small team'),
-      msg('our budget is limited'),
-      // COMPLIANCE intentionally omitted — should be the lowest at score 0
+  it('computes totalScore correctly from mixed dimension scores', async () => {
+    // SCALE=2, LATENCY=1, rest=0 → sum=3, max=12 → round(3/12*100) = 25
+    mockLlmService.generateStructured.mockResolvedValue({
+      ...ALL_ZEROS,
+      SCALE: 2,
+      LATENCY: 1,
+    });
+    const result = await scorer.score([
+      msg('We expect 200 rps and need low latency'),
     ]);
+    expect(result.totalScore).toBe(25);
+  });
+
+  it('sets lowestDimension to the dimension with the lowest score', async () => {
+    mockLlmService.generateStructured.mockResolvedValue({
+      ...ALL_TWOS,
+      COMPLIANCE: 0,
+      isComplete: false,
+    });
+    const result = await scorer.score([msg('all covered except compliance')]);
     expect(result.lowestDimension).toBe(RequirementDimension.COMPLIANCE);
+  });
+
+  it('passes pendingQuestions from LLM response through unchanged', async () => {
+    const questions = [
+      'What is your expected RPS?',
+      'What is your p99 latency target?',
+    ];
+    mockLlmService.generateStructured.mockResolvedValue({
+      ...ALL_ZEROS,
+      questions,
+    });
+    const result = await scorer.score([msg('I need a web app')]);
+    expect(result.pendingQuestions).toEqual(questions);
+  });
+
+  it('passes isComplete: true from LLM response through unchanged', async () => {
+    mockLlmService.generateStructured.mockResolvedValue({ ...ALL_TWOS });
+    const result = await scorer.score([msg('full requirements')]);
+    expect(result.isComplete).toBe(true);
+  });
+
+  it('passes isComplete: false from LLM response through unchanged', async () => {
+    mockLlmService.generateStructured.mockResolvedValue({ ...ALL_ZEROS });
+    const result = await scorer.score([msg('vague requirements')]);
+    expect(result.isComplete).toBe(false);
+  });
+
+  it('scores array contains an entry for every RequirementDimension', async () => {
+    mockLlmService.generateStructured.mockResolvedValue({ ...ALL_ZEROS });
+    const result = await scorer.score([msg('I need a web app')]);
+    const dimensions = result.scores.map((s) => s.dimension);
+    Object.values(RequirementDimension).forEach((d) => {
+      expect(dimensions).toContain(d);
+    });
+  });
+
+  it('clamps out-of-range LLM values to 0-2', async () => {
+    mockLlmService.generateStructured.mockResolvedValue({
+      ...ALL_ZEROS,
+      SCALE: 5, // above max → clamp to 2
+      LATENCY: -1, // below min → clamp to 0
+    });
+    const result = await scorer.score([msg('edge case')]);
+    const scale = result.scores.find(
+      (s) => s.dimension === RequirementDimension.SCALE,
+    );
+    const latency = result.scores.find(
+      (s) => s.dimension === RequirementDimension.LATENCY,
+    );
+    expect(scale?.score).toBe(2);
+    expect(latency?.score).toBe(0);
+  });
+
+  it('sends the last message as userMessage and the rest as conversationHistory', async () => {
+    mockLlmService.generateStructured.mockResolvedValue({ ...ALL_ZEROS });
+    const messages = [
+      msg('First message'),
+      msg('AI reply', 'assistant'),
+      msg('Second user message'),
+    ];
+    await scorer.score(messages);
+
+    expect(mockLlmService.generateStructured).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userMessage: 'Second user message',
+        conversationHistory: expect.arrayContaining([
+          expect.objectContaining({ content: 'First message' }),
+          expect.objectContaining({ content: 'AI reply' }),
+        ]) as unknown,
+      }),
+      expect.anything(),
+    );
   });
 });

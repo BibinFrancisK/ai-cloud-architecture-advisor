@@ -18,6 +18,8 @@ export class DiagramService {
       mermaidSyntax = `flowchart TD\n${mermaidSyntax}`;
     }
 
+    mermaidSyntax = this.sanitizeLabels(mermaidSyntax);
+
     const encoded = Buffer.from(
       JSON.stringify({ code: mermaidSyntax }),
     ).toString('base64');
@@ -29,5 +31,16 @@ export class DiagramService {
     );
 
     return { mermaidSyntax, renderUrl };
+  }
+
+  // Mermaid round-bracket nodes  id(label)  break when the label contains
+  // inner parentheses, because the parser treats ( as a node-shape delimiter.
+  // Rewrite any such unquoted label as  id["label"]  with inner () → [].
+  private sanitizeLabels(syntax: string): string {
+    return syntax.replace(
+      /\b([\w-]+)\(([^"\n]*\([^)\n]*\)[^"\n]*)\)/g,
+      (_: string, id: string, label: string) =>
+        `${id}["${label.replace(/[()]/g, (c: string) => (c === '(' ? '[' : ']'))}"]`,
+    );
   }
 }
