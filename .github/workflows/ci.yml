@@ -106,8 +106,8 @@ jobs:
       - name: Push to ECR
         if: github.event_name == 'push'
         run: |
-          docker tag advisor-api:${{ github.sha }} ${{ secrets.ECR_REGISTRY }}/advisor-api:latest
-          docker push ${{ secrets.ECR_REGISTRY }}/advisor-api:latest
+          docker tag advisor-api:${{ github.sha }} ${{ secrets.ECR_REGISTRY }}/ai-architecture-advisor-ecr:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/ai-architecture-advisor-ecr:latest
 
   deploy:
     runs-on: ubuntu-latest
