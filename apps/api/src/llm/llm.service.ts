@@ -19,9 +19,13 @@ export class LlmService implements OnModuleInit {
   private model!: ChatGoogleGenerativeAI;
 
   onModuleInit(): void {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('GEMINI_API_KEY environment variable is required');
+    }
     this.model = new ChatGoogleGenerativeAI({
       model: LLM_MODEL,
-      apiKey: process.env.GEMINI_API_KEY ?? '',
+      apiKey,
       maxOutputTokens: 8192,
       temperature: 0.2,
     });

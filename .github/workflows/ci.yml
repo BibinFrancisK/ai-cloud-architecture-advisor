@@ -1,0 +1,139 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Required GitHub secrets:
+#   POSTGRES_DB           — test database name
+#   POSTGRES_USER         — test database user
+#   POSTGRES_PASSWORD     — test database password
+#   GEMINI_API_KEY        — Google Gemini API key
+#   AWS_ACCESS_KEY_ID     — AWS credentials (build + deploy jobs)
+#   AWS_SECRET_ACCESS_KEY — AWS credentials (build + deploy jobs)
+#   ECR_REGISTRY          — ECR registry URL (e.g. 123456789.dkr.ecr.<AWS_REGION>.amazonaws.com)
+#
+# Required GitHub variables (Settings → Secrets and variables → Variables):
+#   AWS_REGION            — AWS region for all operations (e.g. us-east-1)
+#   DEPLOY_ENV            — CDK context: dev | staging | prod  (default: dev)
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/api/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npm run type-check
+
+      - name: Unit tests
+        run: npm run test:unit -- --coverage
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Start test database
+        run: docker compose -f test/docker-compose.yml up -d
+        env:
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+      - name: Wait for database to be healthy
+        run: |
+          for i in $(seq 1 12); do
+            docker compose -f test/docker-compose.yml ps db | grep "healthy" && break
+            echo "Waiting for DB... ($i/12)"
+            sleep 5
+          done
+
+      - name: Integration tests
+        run: npm run test:integration -- --forceExit
+        env:
+          DATABASE_URL: postgresql://${{ secrets.POSTGRES_USER }}:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.POSTGRES_DB }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Stop test database
+        if: always()
+        run: docker compose -f test/docker-compose.yml down
+        env:
+          POSTGRES_DB: ${{ secrets.POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+
+  build:
+    runs-on: ubuntu-latest
+    needs: quality
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t advisor-api:${{ github.sha }} .
+
+      - name: Configure AWS credentials
+        if: github.event_name == 'push'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        if: github.event_name == 'push'
+        run: |
+          aws ecr get-login-password --region ${{ vars.AWS_REGION }} | \
+            docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
+
+      - name: Push to ECR
+        if: github.event_name == 'push'
+        run: |
+          docker tag advisor-api:${{ github.sha }} ${{ secrets.ECR_REGISTRY }}/advisor-api:latest
+          docker push ${{ secrets.ECR_REGISTRY }}/advisor-api:latest
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: infra/package-lock.json
+
+      - name: Install infra dependencies
+        run: npm ci
+        working-directory: infra
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: CDK deploy
+        run: npx cdk deploy --context env=${{ vars.DEPLOY_ENV || 'dev' }} --require-approval never
+        working-directory: infra

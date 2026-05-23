@@ -12,6 +12,8 @@ export class SessionService {
       messages: [],
       clarificationRound: 0,
       completenessScore: 0,
+      pendingQuestions: [],
+      clarificationBatch: 0,
       createdAt: new Date(),
     };
     this.sessions.set(session.id, session);
