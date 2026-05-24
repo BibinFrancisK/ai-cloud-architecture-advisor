@@ -121,7 +121,7 @@ jobs:
         id: ecr
         run: |
           ECR_REPO_URI=$(aws cloudformation describe-stacks \
-            --stack-name AdvisorStack \
+            --stack-name AdvisorStack-${{ vars.DEPLOY_ENV || 'dev' }} \
             --region ${{ vars.AWS_REGION }} \
             --query "Stacks[0].Outputs[?OutputKey=='EcrRepositoryUri'].OutputValue | [0]" \
             --output text)
