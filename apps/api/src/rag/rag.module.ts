@@ -1,9 +1,11 @@
 import { Module } from '@nestjs/common';
 import { KnowledgeIngesterService } from './knowledge-ingester.service';
 import { RAGRetrieverService } from './rag-retriever.service';
+import { RagController } from './rag.controller';
 import { VectorStoreService } from './vector-store.service';
 
 @Module({
+  controllers: [RagController],
   providers: [
     VectorStoreService,
     KnowledgeIngesterService,

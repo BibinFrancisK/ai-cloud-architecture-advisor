@@ -12,6 +12,7 @@ WORKDIR /app/apps/api
 COPY --from=builder /app/apps/api/dist ./dist
 COPY --from=builder /app/apps/api/node_modules ./node_modules
 COPY --from=builder /app/knowledge-base /app/knowledge-base
+COPY --from=builder /app/scripts /app/scripts
 COPY --from=builder /app/frontend /app/frontend
 EXPOSE 3000
 CMD ["node", "dist/main"]

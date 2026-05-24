@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   Injectable,
   Logger,
@@ -18,12 +20,31 @@ export class VectorStoreService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(VectorStoreService.name);
   private pool!: Pool;
 
-  onModuleInit(): void {
-    this.pool = new Pool({ connectionString: process.env.DATABASE_URL });
+  async onModuleInit(): Promise<void> {
+    const connectionString =
+      process.env.DATABASE_URL ??
+      `postgresql://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:5432/${process.env.DB_NAME}`;
+    this.pool = new Pool({
+      connectionString,
+      ssl:
+        process.env.NODE_ENV === 'production'
+          ? { rejectUnauthorized: false }
+          : false,
+    });
+    await this.applySchema();
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.pool.end();
+  }
+
+  private async applySchema(): Promise<void> {
+    const sqlPath =
+      process.env.INIT_SQL_PATH ??
+      path.resolve(process.cwd(), '../../scripts/init.sql');
+    const sql = fs.readFileSync(sqlPath, 'utf-8');
+    await this.pool.query(sql);
+    this.logger.log('Schema applied');
   }
 
   async upsertChunk(chunk: KnowledgeChunkInput): Promise<void> {

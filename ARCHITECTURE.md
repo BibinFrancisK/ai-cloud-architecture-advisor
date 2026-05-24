@@ -87,7 +87,7 @@ LLM call → generateStructured(messages, assessmentSchema)
 
 ## 3. RAG Pipeline
 
-### Ingestion (one-time — `npm run ingest`)
+### Ingestion (`npm run ingest` locally · `POST /admin/ingest` in production)
 
 ```mermaid
 flowchart LR
@@ -101,7 +101,8 @@ flowchart LR
 
 - Each chunk is embedded individually (not in batch) to avoid silent failures
 - 800 ms delay between chunks to respect Gemini free-tier rate limits
-- IVFFlat index (`lists = 100`, cosine ops) created at DB init for fast similarity search
+- No vector index — sequential scan (`ORDER BY embedding <=> $1 LIMIT 5`) is used; IVFFlat was removed because it has a 2000-dimension hard limit and `gemini-embedding-001` produces 3072-dim vectors; sequential scan is fast enough for a ~100-vector corpus
+- Schema (`CREATE EXTENSION`, `CREATE TABLE IF NOT EXISTS`) is applied automatically in `VectorStoreService.onModuleInit()` on every container start — no manual migration step
 
 ### Database schema
 
@@ -115,11 +116,6 @@ CREATE TABLE knowledge_chunks (
   embedding   vector(3072),
   created_at  TIMESTAMP DEFAULT NOW()
 );
-
-CREATE INDEX knowledge_chunks_embedding_idx
-  ON knowledge_chunks
-  USING ivfflat (embedding vector_cosine_ops)
-  WITH (lists = 100);
 ```
 
 ### Retrieval (per architecture-generation request)
@@ -162,7 +158,7 @@ flowchart LR
 | `clarification/` | `requirement.scorer.ts`, `clarification.engine.ts` | `RequirementScorer` — async LLM call returning 6 dimension scores + follow-up questions; `ClarificationEngine` — `buildReadyMessage()` only (question selection moved to LLM) |
 | `architecture/` | `architecture.service.ts`, `architecture-generator.service.ts`, `diagram.service.ts` | LLM call + Zod-parsed `ArchitectureRecommendation`; Mermaid diagram generation; `GET/POST /architecture` endpoints |
 | `cdk/` | `cdk-generator.service.ts`, `cdk.controller.ts` | CDK TypeScript generation; supports `mode` (complete / skeleton) and `environment` (dev / staging / prod); gated by `RequirementsCompleteGuard` |
-| `rag/` | `vector-store.service.ts`, `rag-retriever.service.ts`, `knowledge-ingester.service.ts` | pgvector CRUD + similarity search; query embedding + retrieval; one-time ingestion pipeline |
+| `rag/` | `vector-store.service.ts`, `rag-retriever.service.ts`, `knowledge-ingester.service.ts`, `rag.controller.ts` | pgvector CRUD + similarity search; query embedding + retrieval; ingestion pipeline (triggerable via `POST /admin/ingest`); schema applied on startup |
 | `llm/` | `llm.service.ts`, `prompt-builder.service.ts` | Gemini client wrapper with `generateStructured<T>()` (Zod-validated); prompt assembly with RAG context injection |
 | `health/` | `health.controller.ts` | `GET /health` — checks DB connectivity and LLM availability |
 | `common/` | `guards/`, `filters/`, `interceptors/`, `types/`, `constants.ts` | Global exception filter; `SessionExistsGuard`; `RequirementsCompleteGuard`; `LoggingInterceptor`; all shared types and constants (`LLM_MODEL`, `EMBEDDING_MODEL`) |
@@ -192,19 +188,20 @@ The project dogfoods itself — the deployment infrastructure is generated using
 ```mermaid
 flowchart TD
     Internet["Internet"] --> ALB["Application Load Balancer<br/>Public Subnet · Port 80"]
-    ALB -- "port 3000" --> EC2
-    EC2["EC2 t2.micro<br/>Private Subnet<br/>Docker: advisor-api"]
-    EC2 -- "port 5432" --> RDS
+    ALB -- "port 3000" --> Fargate
+    Fargate["ECS Fargate Task<br/>Private Subnet<br/>256 CPU · 512 MiB"]
+    Fargate -- "port 5432" --> RDS
     RDS["RDS PostgreSQL t3.micro<br/>Isolated Subnet · pgvector"]
-    EC2 --> SM["Secrets Manager<br/>advisor/gemini-api-key"]
-    EC2 --> ECR["ECR Repository<br/>ai-architecture-advisor-ecr"]
+    Fargate --> SM["Secrets Manager<br/>GEMINI_API_KEY · DB credentials"]
+    Fargate --> ECR["ECR Repository<br/>ai-architecture-advisor-ecr"]
+    Fargate --> CW["CloudWatch Logs<br/>advisor-api stream"]
 
     subgraph VPC ["VPC — 2 AZs"]
         subgraph Public ["Public Subnets"]
             ALB
         end
         subgraph Private ["Private Subnets (NAT egress)"]
-            EC2
+            Fargate
         end
         subgraph Isolated ["Isolated Subnets (no internet)"]
             RDS
@@ -219,11 +216,13 @@ flowchart TD
 | ECR Repository | `ai-architecture-advisor-ecr`; `imageTagMutability: MUTABLE` |
 | VPC | 2 AZs; public + private (NAT) + isolated subnet groups; 1 NAT Gateway |
 | Security Groups | `albSg` (80 from internet), `apiSg` (3000 from albSg), `rdsSg` (5432 from apiSg) |
-| RDS PostgreSQL | `t3.micro`, PostgreSQL 14, `advisor` DB; isolated subnet group; deletion protection off (demo) |
-| Secrets Manager | `advisor/gemini-api-key` — stores `GEMINI_API_KEY`; read-granted to EC2 instance role |
-| EC2 t2.micro | Amazon Linux 2023; private subnet; UserData installs Docker, pulls from ECR, starts container |
-| IAM Instance Role | `ecr:GetAuthorizationToken`, `ecr:BatchGetImage`, `secretsmanager:GetSecretValue` only |
-| ALB | Public subnet; HTTP:80 listener → EC2 target group on port 3000 |
+| RDS PostgreSQL | `t3.micro`, PostgreSQL 16, `advisor` DB; isolated subnet group; deletion protection off (demo) |
+| Secrets Manager | `advisor/gemini-api-key` + RDS-generated secret; injected into container via `ecs.Secret.fromSecretsManager()` |
+| ECS Cluster | Fargate; private subnet; `desiredCount: 1`; ECS Exec enabled for `execute-command` debugging |
+| ECS Task Definition | 256 CPU / 512 MiB; `GEMINI_API_KEY`, `DB_HOST`, `DB_USER`, `DB_PASS`, `DB_NAME` from Secrets Manager |
+| IAM Task Execution Role | `AmazonECSTaskExecutionRolePolicy` + ECR pull + Secrets Manager read (used by ECS agent) |
+| CloudWatch Log Group | `/ecs/ai-architecture-advisor` log group; `advisor-api` stream prefix; 1-week retention |
+| ALB | Public subnet; HTTP:80 listener → ECS Fargate service on port 3000 |
 
 ### CI/CD pipeline (`.github/workflows/ci.yml`)
 
@@ -241,15 +240,20 @@ quality job
       │
       ▼
 build job (main branch only)
-  └── docker build -t advisor-api:<sha> .
-  └── aws ecr get-login-password | docker login
-  └── docker push $ECR_REGISTRY:latest
+  └── docker build -t advisor-api:<sha> .   ← validation only, no push
       │
       ▼
 deploy job (main branch push only)
   └── npm ci (infra/)
-  └── cdk deploy --context env=$DEPLOY_ENV --require-approval never
+  └── cdk deploy --require-approval never   ← creates ECR repo if absent
+  └── query EcrRepositoryUri from CloudFormation stack output
+  └── docker login to ECR registry
+  └── docker build + push to ECR :latest
+  └── aws ecs update-service --force-new-deployment
+  └── aws ecs wait services-stable
 ```
+
+CDK runs **before** the ECR push so the repository is guaranteed to exist on first deployment. The ECR URI is read live from the stack output — no `ECR_REGISTRY` secret required.
 
 ---
 
@@ -269,7 +273,7 @@ LLM output is non-deterministic. A model that correctly returns valid JSON 99% o
 
 ### Why pgvector over a managed vector database
 
-Pinecone, Weaviate, and Qdrant are purpose-built vector databases. They are also additional paid services with their own SDKs, API keys, and operational surfaces. pgvector runs as a PostgreSQL extension — the same database already used for the application. The `<=>` cosine distance operator, IVFFlat index, and `ORDER BY … LIMIT` retrieval are standard SQL. This eliminates one external dependency, keeps the local dev stack to a single `docker compose up -d`, and maps directly to the production path: Amazon Aurora PostgreSQL supports pgvector natively. When the project needs to scale, the migration is a connection string change, not an architectural refactor.
+Pinecone, Weaviate, and Qdrant are purpose-built vector databases. They are also additional paid services with their own SDKs, API keys, and operational surfaces. pgvector runs as a PostgreSQL extension — the same database already used for the application. The `<=>` cosine distance operator and `ORDER BY … LIMIT` retrieval are standard SQL. This eliminates one external dependency, keeps the local dev stack to a single `docker compose up -d`, and maps directly to the production path: Amazon Aurora PostgreSQL supports pgvector natively. When the project needs to scale, the migration is a connection string change, not an architectural refactor.
 
 ---
 
