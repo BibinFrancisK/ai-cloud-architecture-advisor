@@ -30,7 +30,7 @@ This is not a toy chatbot. It demonstrates: multi-turn stateful AI conversations
 - **Mermaid diagrams from JSON** — `DiagramService` converts the parsed `ArchitectureRecommendation` to `flowchart TD` Mermaid syntax; diagrams render natively on GitHub and in the chat UI via CDN
 - **Strict state machine, enforced by Guards** — `SessionExistsGuard` and `RequirementsCompleteGuard` are NestJS Guards wired to the route definitions; `POST /generate-cdk` returns `403` if `status !== ARCHITECTURE_APPROVED` with no application-layer workaround possible
 - **Session state machine** — strict one-way flow: `CLARIFYING → READY_TO_GENERATE → ARCHITECTURE_GENERATED → ARCHITECTURE_APPROVED → CDK_GENERATED`
-- **AWS CDK infrastructure** — the project dogfoods itself: `infra/lib/advisor-stack.ts` provisions VPC, EC2, RDS PostgreSQL, ECR, and Secrets Manager using CDK v2
+- **AWS CDK infrastructure** — the project dogfoods itself: `infra/lib/advisor-stack.ts` provisions VPC, ECS Fargate, RDS PostgreSQL, ECR, CloudWatch Logs, and Secrets Manager using CDK v2
 
 ---
 
@@ -72,7 +72,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for full diagrams including the conversat
 | Infrastructure as Code | AWS CDK v2 (TypeScript) |
 | Containers | Docker Compose (DB only; API runs with hot reload outside Docker) |
 | CI/CD | GitHub Actions (lint → type-check → unit tests → integration tests → Docker build → ECR push → CDK deploy) |
-| Deployment | AWS EC2 t2.micro + RDS PostgreSQL t3.micro (free tier) |
+| Deployment | AWS ECS Fargate + RDS PostgreSQL t3.micro (free tier) |
 
 ---
 
@@ -124,6 +124,8 @@ All endpoints are scoped to a session. Create a session first, then drive the co
 | `/sessions/:id/generate-cdk` | POST | Generate CDK TypeScript code — requires `ARCHITECTURE_APPROVED` |
 | `/sessions/:id/diagram` | GET | Get Mermaid syntax + `mermaid.live` render URL |
 | `/health` | GET | Service health: DB connectivity + LLM availability |
+| `/admin/ingest` | POST | Trigger knowledge-base re-ingestion (202, runs in background ~80 s) |
+| `/admin/ingest/status` | GET | Current chunk count in the vector store |
 
 Full interactive documentation is available at `/api/docs` (Swagger UI).
 
@@ -147,7 +149,7 @@ ai-cloud-architecture-advisor/
 │       └── session/             # In-memory session store
 ├── docs/                        # Architecture diagrams + demo GIF
 ├── frontend/                    # Static chat UI (HTML + JS, served by NestJS)
-├── infra/                       # AWS CDK stack (VPC, EC2, RDS, ECR, Secrets Manager)
+├── infra/                       # AWS CDK stack (VPC, ECS Fargate, RDS, ECR, Secrets Manager)
 ├── knowledge-base/              # 8 curated AWS Markdown files (RAG source)
 ├── scripts/                     # init.sql (pgvector schema)
 ├── docker-compose.yml           # PostgreSQL + pgvector (local dev)
@@ -177,11 +179,11 @@ Infrastructure is defined in `infra/lib/advisor-stack.ts` (AWS CDK v2). The stac
 
 - **ECR** — Docker image repository
 - **VPC** — public + private + isolated subnet groups across 2 AZs
-- **EC2 t2.micro** — API container (free tier); UserData installs Docker, pulls from ECR, starts the container
+- **ECS Fargate** — API container (256 CPU / 512 MiB); secrets injected natively, CloudWatch Logs, rolling deploys
 - **RDS PostgreSQL t3.micro** — pgvector-enabled database in isolated subnet (free tier)
-- **Secrets Manager** — stores `GEMINI_API_KEY` injected at EC2 runtime
+- **Secrets Manager** — stores `GEMINI_API_KEY` and DB credentials; injected into container at runtime
 
-CI/CD auto-deploys on every merge to `main` via GitHub Actions: quality checks → Docker build → ECR push → `cdk deploy`.
+CI/CD auto-deploys on every merge to `main` via GitHub Actions: quality checks → Docker build validation → CDK deploy → ECR push → ECS rolling redeployment.
 
 ```bash
 cd infra

@@ -11,9 +11,8 @@ on:
 #   POSTGRES_USER         — test database user
 #   POSTGRES_PASSWORD     — test database password
 #   GEMINI_API_KEY        — Google Gemini API key
-#   AWS_ACCESS_KEY_ID     — AWS credentials (build + deploy jobs)
-#   AWS_SECRET_ACCESS_KEY — AWS credentials (build + deploy jobs)
-#   ECR_REGISTRY          — ECR registry URL (e.g. 123456789.dkr.ecr.<AWS_REGION>.amazonaws.com)
+#   AWS_ACCESS_KEY_ID     — AWS credentials (deploy job)
+#   AWS_SECRET_ACCESS_KEY — AWS credentials (deploy job)
 #
 # Required GitHub variables (Settings → Secrets and variables → Variables):
 #   AWS_REGION            — AWS region for all operations (e.g. us-east-1)
@@ -89,26 +88,6 @@ jobs:
       - name: Build Docker image
         run: docker build -t advisor-api:${{ github.sha }} .
 
-      - name: Configure AWS credentials
-        if: github.event_name == 'push'
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_REGION }}
-
-      - name: Login to ECR
-        if: github.event_name == 'push'
-        run: |
-          aws ecr get-login-password --region ${{ vars.AWS_REGION }} | \
-            docker login --username AWS --password-stdin ${{ secrets.ECR_REGISTRY }}
-
-      - name: Push to ECR
-        if: github.event_name == 'push'
-        run: |
-          docker tag advisor-api:${{ github.sha }} ${{ secrets.ECR_REGISTRY }}:latest
-          docker push ${{ secrets.ECR_REGISTRY }}:latest
-
   deploy:
     runs-on: ubuntu-latest
     needs: build
@@ -137,3 +116,39 @@ jobs:
       - name: CDK deploy
         run: npx cdk deploy --context env=${{ vars.DEPLOY_ENV || 'dev' }} --require-approval never
         working-directory: infra
+
+      - name: Get ECR URI from stack output
+        id: ecr
+        run: |
+          ECR_REPO_URI=$(aws cloudformation describe-stacks \
+            --stack-name AdvisorStack \
+            --region ${{ vars.AWS_REGION }} \
+            --query "Stacks[0].Outputs[?OutputKey=='EcrRepositoryUri'].OutputValue | [0]" \
+            --output text)
+          echo "uri=$ECR_REPO_URI" >> $GITHUB_OUTPUT
+
+      - name: Login to ECR
+        run: |
+          ECR_REGISTRY=$(echo "${{ steps.ecr.outputs.uri }}" | cut -d'/' -f1)
+          aws ecr get-login-password --region ${{ vars.AWS_REGION }} | \
+            docker login --username AWS --password-stdin "$ECR_REGISTRY"
+
+      - name: Build and push image to ECR
+        run: |
+          docker build -t "${{ steps.ecr.outputs.uri }}:latest" .
+          docker push "${{ steps.ecr.outputs.uri }}:latest"
+
+      - name: Force ECS redeployment
+        run: |
+          aws ecs update-service \
+            --cluster ai-architecture-advisor-ecs-cluster \
+            --service advisor-service \
+            --force-new-deployment \
+            --region ${{ vars.AWS_REGION }}
+
+      - name: Wait for ECS service to stabilise
+        run: |
+          aws ecs wait services-stable \
+            --cluster ai-architecture-advisor-ecs-cluster \
+            --services advisor-service \
+            --region ${{ vars.AWS_REGION }}

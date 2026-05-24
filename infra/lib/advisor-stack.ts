@@ -1,15 +1,14 @@
-import * as fs from 'fs';
-import * as path from 'path';
 import * as cdk from 'aws-cdk-lib';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as ecr from 'aws-cdk-lib/aws-ecr';
+import * as ecs from 'aws-cdk-lib/aws-ecs';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as logs from 'aws-cdk-lib/aws-logs';
 import * as rds from 'aws-cdk-lib/aws-rds';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2';
-import * as elbv2_targets from 'aws-cdk-lib/aws-elasticloadbalancingv2-targets';
 import { Construct } from 'constructs';
-import { ADVISOR_ECR, GEMINI_SECRET_KEY, POSTGRES_SECRET_KEY, AWS_REGION } from '../types/constants';
+import { ADVISOR_ECR, ADVISOR_ECS_CLUSTER, ADVISOR_LOG_GROUP, GEMINI_SECRET_KEY, POSTGRES_SECRET_KEY } from '../types/constants';
 
 export class AdvisorStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -43,7 +42,7 @@ export class AdvisorStack extends cdk.Stack {
 
     const apiSg = new ec2.SecurityGroup(this, 'ApiSg', {
       vpc,
-      description: 'API EC2 - allow traffic from ALB',
+      description: 'API container - allow traffic from ALB',
     });
     apiSg.addIngressRule(albSg, ec2.Port.tcp(3000), 'App port from ALB');
 
@@ -53,7 +52,7 @@ export class AdvisorStack extends cdk.Stack {
     });
     rdsSg.addIngressRule(apiSg, ec2.Port.tcp(5432), 'Postgres from API');
 
-    // Secrets Manager
+    // Secrets Manager 
     const geminiSecret = new secretsmanager.Secret(this, 'GeminiApiKey', {
       secretName: GEMINI_SECRET_KEY,
       description: 'Google Gemini API key for the Advisor API',
@@ -79,40 +78,71 @@ export class AdvisorStack extends cdk.Stack {
       backupRetention: cdk.Duration.days(0),
     });
 
-    // EC2 instance role
-    const instanceRole = new iam.Role(this, 'ApiInstanceRole', {
-      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+    // ECS Cluster
+    const cluster = new ecs.Cluster(this, 'AdvisorCluster', {
+      vpc,
+      clusterName: ADVISOR_ECS_CLUSTER,
+    });
+
+    // Task Execution Role — used by the ECS agent to pull images, push logs, and inject secrets
+    const executionRole = new iam.Role(this, 'TaskExecutionRole', {
+      assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       managedPolicies: [
-        iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonSSMManagedInstanceCore'),
+        iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AmazonECSTaskExecutionRolePolicy'),
       ],
     });
-    ecrRepo.grantPull(instanceRole);
-    geminiSecret.grantRead(instanceRole);
-    db.secret?.grantRead(instanceRole);
+    ecrRepo.grantPull(executionRole);
+    geminiSecret.grantRead(executionRole);
+    db.secret!.grantRead(executionRole);
 
-    // EC2 UserData - export CDK tokens as shell variables then run the script
-    const userData = ec2.UserData.forLinux();
-    userData.addCommands(
-      `export AWS_REGION="${AWS_REGION}"`,
-      `export ECR_REPO_URI="${ecrRepo.repositoryUri}"`,
-      `export POSTGRES_SECRET_ID="${POSTGRES_SECRET_KEY}"`,
-      `export GEMINI_SECRET_ID="${GEMINI_SECRET_KEY}"`,
-    );
-    const startupScript = fs.readFileSync(
-      path.join(__dirname, '..', 'scripts', 'ec2-userdata.sh'),
-      'utf-8',
-    );
-    userData.addCommands(startupScript);
+    // CloudWatch Log Group
+    const logGroup = new logs.LogGroup(this, 'AdvisorLogs', {
+      logGroupName: ADVISOR_LOG_GROUP,
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
 
-    // EC2 instance
-    const apiInstance = new ec2.Instance(this, 'ApiInstance', {
-      vpc,
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T3, ec2.InstanceSize.MICRO),
-      machineImage: ec2.MachineImage.latestAmazonLinux2023(),
-      securityGroup: apiSg,
+    // Fargate Task Definition
+    const taskDef = new ecs.FargateTaskDefinition(this, 'AdvisorTaskDef', {
+      cpu: 256,
+      memoryLimitMiB: 512,
+      executionRole,
+    });
+
+    taskDef.addContainer('ApiContainer', {
+      image: ecs.ContainerImage.fromEcrRepository(ecrRepo, 'latest'),
+      portMappings: [{ containerPort: 3000 }],
+      environment: { NODE_ENV: 'production' }, 
+      secrets: {
+        GEMINI_API_KEY: ecs.Secret.fromSecretsManager(geminiSecret),
+        DB_HOST:        ecs.Secret.fromSecretsManager(db.secret!, 'host'),
+        DB_USER:        ecs.Secret.fromSecretsManager(db.secret!, 'username'),
+        DB_PASS:        ecs.Secret.fromSecretsManager(db.secret!, 'password'),
+        DB_NAME:        ecs.Secret.fromSecretsManager(db.secret!, 'dbname'),
+      },
+      logging: ecs.LogDrivers.awsLogs({
+        streamPrefix: 'advisor-api',
+        logGroup,
+      }),
+      healthCheck: {
+        command: ['CMD-SHELL', 'wget -qO- http://localhost:3000/health || exit 1'],
+        interval: cdk.Duration.seconds(30),
+        timeout: cdk.Duration.seconds(5),
+        retries: 3,
+        startPeriod: cdk.Duration.seconds(60),
+      },
+    });
+
+    // Fargate Service
+    const fargateService = new ecs.FargateService(this, 'AdvisorService', {
+      cluster,
+      taskDefinition: taskDef,
+      serviceName: 'advisor-service',
+      desiredCount: 1,
+      securityGroups: [apiSg],
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      role: instanceRole,
-      userData,
+      assignPublicIp: false,
+      enableExecuteCommand: true,
     });
 
     // ALB
@@ -131,7 +161,7 @@ export class AdvisorStack extends cdk.Stack {
     listener.addTargets('ApiTarget', {
       port: 3000,
       protocol: elbv2.ApplicationProtocol.HTTP,
-      targets: [new elbv2_targets.InstanceTarget(apiInstance, 3000)],
+      targets: [fargateService],
       healthCheck: {
         path: '/health',
         interval: cdk.Duration.seconds(30),
@@ -139,6 +169,16 @@ export class AdvisorStack extends cdk.Stack {
         healthyThresholdCount: 2,
         unhealthyThresholdCount: 3,
       },
+    });
+
+    new cdk.CfnOutput(this, 'EcsClusterName', {
+      value: cluster.clusterName,
+      description: 'ECS cluster name - used by CI to force redeployment',
+    });
+
+    new cdk.CfnOutput(this, 'EcsServiceName', {
+      value: fargateService.serviceName,
+      description: 'ECS service name - used by CI to force redeployment',
     });
 
     // Outputs
