@@ -18,7 +18,7 @@
 3. **Recommend** — Retrieves grounded AWS patterns from an 8-file knowledge base via RAG, then generates a structured architecture with services, explicit tradeoffs, Well-Architected alignment scores, and a Mermaid diagram
 4. **Generate** — Produces AWS CDK TypeScript infrastructure code, gated behind architecture approval — the system never generates CDK without a reviewed and approved architecture
 
-This is not a toy chatbot. It demonstrates: multi-turn stateful AI conversations with structured clarification gates, RAG with vector similarity search, Zod-validated structured LLM output, and AWS CDK generation with guardrails.
+What this app demonstrates: multi-turn stateful AI conversations with structured clarification gates, RAG with vector similarity search, Zod-validated structured LLM output, and AWS CDK generation with guardrails.
 
 ---
 
