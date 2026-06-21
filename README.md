@@ -183,7 +183,7 @@ Infrastructure is defined in `infra/lib/advisor-stack.ts` (AWS CDK v2). The stac
 - **RDS PostgreSQL t3.micro** — pgvector-enabled database in isolated subnet (free tier)
 - **Secrets Manager** — stores `GEMINI_API_KEY` and DB credentials; injected into container at runtime
 
-CI/CD auto-deploys on every merge to `main` via GitHub Actions: quality checks → Docker build validation → CDK deploy → ECR push → ECS rolling redeployment.
+CI/CD auto-deploys on every merge to `main` via GitHub Actions: quality checks → Docker build validation → CDK deploy → ECR push → ECS rolling redeployment. The deploy job is skipped when the `DEPLOY_ENV` repository variable is not set, making the workflow safe to run in forks without AWS credentials.
 
 ```bash
 cd infra

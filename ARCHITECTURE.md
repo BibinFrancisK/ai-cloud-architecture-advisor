@@ -243,7 +243,7 @@ build job (main branch only)
   └── docker build -t advisor-api:<sha> .   ← validation only, no push
       │
       ▼
-deploy job (main branch push only)
+deploy job (main branch push + DEPLOY_ENV variable set)
   └── npm ci (infra/)
   └── cdk deploy --require-approval never   ← creates ECR repo if absent
   └── query EcrRepositoryUri from CloudFormation stack output
